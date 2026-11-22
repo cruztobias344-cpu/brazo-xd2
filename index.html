@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Visor 3D — Brazo Robótico</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#10151d;color:#e8edf4;font-family:system-ui,Segoe UI,Arial,sans-serif}
+header{padding:18px 22px;background:#161e29;border-bottom:1px solid #2b3745}h1{margin:0;font-size:1.25rem}header p{margin:5px 0 0;color:#9fb0c4;font-size:.9rem}
+#stage{position:relative;height:calc(100vh - 88px);min-height:480px}canvas{display:block;width:100%;height:100%}
+.panel{position:absolute;top:14px;left:14px;background:#182230dd;border:1px solid #334456;border-radius:12px;padding:12px;width:min(320px,calc(100% - 28px));backdrop-filter:blur(8px)}
+.panel label{display:block;color:#b8c7d8;font-size:.85rem;margin:9px 0 5px}.panel button,.panel select{background:#253446;color:#f4f7fb;border:1px solid #465a70;border-radius:8px;padding:9px 11px;cursor:pointer}.panel button{margin:3px 4px 3px 0}.panel select{width:100%}.hint{font-size:.78rem;color:#9fb0c4;line-height:1.4;margin-top:9px}.status{font-size:.85rem;color:#c6d7e8;margin-top:8px}
+</style>
+</head>
+<body>
+<header><h1>Brazo Robótico — Visor 3D</h1><p>Explora el modelo con el mouse: arrastra para girar, rueda para zoom.</p></header>
+<div id="stage"><div class="panel">
+<label for="anim">Animación exportada</label><select id="anim"><option value="">Cargando animaciones…</option></select>
+<div><button id="play">▶ Reproducir</button><button id="pause">⏸ Pausar</button><button id="reset">↺ Reiniciar vista</button></div>
+<div class="hint">Mouse: arrastra para rotar · rueda para acercar/alejar · clic derecho y arrastra para desplazar.</div><div id="status" class="status">Cargando modelo…</div>
+</div></div>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js';
+import {OrbitControls} from 'https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/controls/OrbitControls.js';
+import {GLTFLoader} from 'https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/loaders/GLTFLoader.js';
+import {DRACOLoader} from 'https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/loaders/DRACOLoader.js';
+const stage=document.querySelector('#stage'), status=document.querySelector('#status'), sel=document.querySelector('#anim');
+const scene=new THREE.Scene(); scene.background=new THREE.Color('#dce3eb');
+const camera=new THREE.PerspectiveCamera(45,stage.clientWidth/stage.clientHeight,.01,10000);camera.position.set(3,3,5);
+const renderer=new THREE.WebGLRenderer({antialias:true});renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.setSize(stage.clientWidth,stage.clientHeight);renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.setClearColor('#dce3eb');stage.appendChild(renderer.domElement);
+scene.add(new THREE.HemisphereLight(0xffffff,0x657080,2));const light=new THREE.DirectionalLight(0xffffff,2.4);light.position.set(4,8,5);scene.add(light);
+const controls=new OrbitControls(camera,renderer.domElement);controls.enableDamping=true;
+const draco=new DRACOLoader();draco.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/libs/draco/');
+const loader=new GLTFLoader();loader.setDRACOLoader(draco);
+let mixer=null, clips=[], actions=[];
+loader.load('./RB_Brazo_Robotico_Completo2.glb',gltf=>{
+ const model=gltf.scene;scene.add(model); clips=gltf.animations||[];
+ const box=new THREE.Box3().setFromObject(model), center=box.getCenter(new THREE.Vector3()), size=box.getSize(new THREE.Vector3());model.position.sub(center);
+ const maxDim=Math.max(size.x,size.y,size.z)||1;camera.position.set(maxDim*1.5,maxDim*1.15,maxDim*1.8);camera.near=maxDim/1000;camera.far=maxDim*100;camera.updateProjectionMatrix();controls.target.set(0,0,0);controls.update();
+ mixer=new THREE.AnimationMixer(model);actions=clips.map(c=>mixer.clipAction(c));sel.innerHTML='';
+ if(clips.length){clips.forEach((c,i)=>{const o=document.createElement('option');o.value=i;o.textContent=c.name||`Animación ${i+1}`;sel.appendChild(o);});status.textContent=`Modelo cargado · ${clips.length} animación(es)`;}
+ else{sel.innerHTML='<option>Sin animaciones</option>';status.textContent='Modelo cargado · No se encontraron clips animados';}
+},xhr=>{if(xhr.total)status.textContent=`Cargando: ${Math.round(xhr.loaded/xhr.total*100)}%`;},err=>{status.textContent='Error al cargar modelo. Revisa que ambos archivos estén en la misma carpeta y la página esté alojada.';console.error(err)});
+function stopAll(){actions.forEach(a=>a.stop())}
+document.querySelector('#play').onclick=()=>{if(!actions.length)return;stopAll();actions[Number(sel.value)].reset().play();};
+document.querySelector('#pause').onclick=()=>actions.forEach(a=>a.paused=!a.paused);
+document.querySelector('#reset').onclick=()=>{controls.reset();};
+const clock=new THREE.Clock();function animate(){requestAnimationFrame(animate);if(mixer)mixer.update(clock.getDelta());controls.update();renderer.render(scene,camera)}animate();
+window.addEventListener('resize',()=>{camera.aspect=stage.clientWidth/stage.clientHeight;camera.updateProjectionMatrix();renderer.setSize(stage.clientWidth,stage.clientHeight)});
+</script></body></html>
